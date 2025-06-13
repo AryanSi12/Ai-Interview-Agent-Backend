@@ -5,6 +5,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -18,7 +19,8 @@ public class InterviewSession {
     private String domain;
     private String experienceLevel;
 
-    private List<QA> qaList;
+    private List<QA> qaList = new ArrayList<>();
+
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -1,13 +1,15 @@
 // GeminiService.java
 package com.Interview.AiAgent.Services;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.*;
 
 @Service
 public class GeminiService {
 
-    private final GeminiClient geminiClient = new GeminiClient();
+    @Autowired
+    private GeminiClient geminiClient;
 
     public String getNextQuestion(String context, String resume, String lastAnswer,
                                   int questionNum, String experienceLevel, String questionType) {
@@ -80,6 +82,33 @@ public class GeminiService {
 
         return geminiClient.generate(prompt);
     }
+
+    public String extractResumeDetails(String resumeText) {
+        String prompt = """
+        You are an intelligent resume parser.
+
+        Here is a candidate's resume:
+
+        %s
+
+        Extract and return the following details in JSON format:
+        {
+          "name": "...",
+          "email": "...",
+          "phone": "...",
+          "skills": [...],
+          "projects": [...],
+          "experience": "...",
+          "education": "..."
+        }
+        Be word and case sensitive
+        fetch most of the important details below mentioned fields
+        Only include skills and technologies that are actually mentioned in the resume.
+        """.formatted(resumeText);
+
+        return geminiClient.generate(prompt);
+    }
+
 
     public boolean isInappropriateAnswer(String answer) {
         String prompt = """
