@@ -13,11 +13,10 @@ public class AiAgentApplication {
 	public static void main(String[] args) {
 		// Load .env once
 		Dotenv dotenv = Dotenv.configure()
-				.filename(".env") // optional, default is ".env"
+				.filename(".env")
 				.ignoreIfMissing()
 				.load();
 
-		// Inject into system environment (Spring Boot reads from this)
 		for (DotenvEntry entry : dotenv.entries()) {
 			System.setProperty(entry.getKey(), entry.getValue());
 		}

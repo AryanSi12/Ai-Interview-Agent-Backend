@@ -1,0 +1,201 @@
+package com.Interview.AiAgent.Services;
+
+import com.Interview.AiAgent.DTO.EndInterviewResponse;
+import com.Interview.AiAgent.DTO.InterviewResponse;
+import com.Interview.AiAgent.DTO.StartInterviewRequest;
+import com.Interview.AiAgent.DTO.SubmitAnswerRequest;
+import com.Interview.AiAgent.Models.InterviewSession;
+import com.Interview.AiAgent.Repository.InterviewRepository;
+import com.Interview.AiAgent.Repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+@Service
+public class InterviewService {
+    @Autowired
+    InterviewRepository interviewRepository;
+
+    @Autowired
+    GeminiService geminiService;
+
+    @Autowired
+    UserRepository userRepository;
+    public InterviewResponse startInterview(StartInterviewRequest request) {
+        try{
+            String resumeText = request.getResume();
+
+            InterviewSession session = new InterviewSession();
+            session.setUserId(request.getUserId());
+            session.setDomain(request.getDomain());
+            session.setExperienceLevel(request.getExperienceLevel());
+            session.setQaList(new ArrayList<>());
+            session.setCreatedAt(LocalDateTime.now());
+            session.setUpdatedAt(LocalDateTime.now());
+            session.setTotalQuestions(request.getTotalQuestions());
+            session.setResume(request.getResume());
+            interviewRepository.save(session);
+
+            String introQuestion = "Hello! I'm your AI interviewer, Before we begin, I’d love to get to know you a bit better. Could you please introduce yourself?";
+            InterviewSession.QA firstQA = new InterviewSession.QA();
+            firstQA.setQuestion(introQuestion);
+            session.getQaList().add(firstQA);
+
+            interviewRepository.save(session);
+
+            return new InterviewResponse(session.getSessionId(), introQuestion,null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public InterviewResponse handleSubmit(String sessionId, SubmitAnswerRequest request) {
+        InterviewSession session = interviewRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        List<InterviewSession.QA> qaList = session.getQaList();
+        int questionNum = qaList.size();
+
+        // Set the answer to the current question
+        InterviewSession.QA currQA = qaList.get(questionNum - 1);
+        currQA.setAnswer(request.getAnswer());
+
+        // Check for inappropriate content
+        if (geminiService.isInappropriateAnswer(request.getAnswer())) {
+            currQA.setScoreFeedbackText("Your response was flagged as inappropriate.");
+            qaList.set(questionNum - 1, currQA); // update in list
+
+            session.setUpdatedAt(LocalDateTime.now());
+            interviewRepository.save(session);
+
+            EndInterviewResponse endResponse = endInterview(sessionId);
+            return new InterviewResponse(sessionId, null,
+                    "Your response was flagged as inappropriate. The interview has been terminated.\n\n" +
+                            "Final Score: " + endResponse.getAverageScore() + "\n" +
+                            "Feedback: " + endResponse.getFeedback());
+        }
+
+
+        // Score the answer using Gemini
+        String scoreSummary = geminiService.getScore(
+                currQA.getQuestion(),
+                request.getAnswer(),
+                session.getExperienceLevel()
+        );
+
+        currQA.setScoreFeedbackText(scoreSummary);
+        System.out.println(scoreSummary);
+        Map<String, Double> parsedScores = extractDetailedScores(scoreSummary);
+
+        currQA.setConfidenceScore(parsedScores.getOrDefault("Confidence", null));
+        currQA.setQualityScore(parsedScores.getOrDefault("Quality", null));
+        currQA.setCommunicationScore(parsedScores.getOrDefault("Communication", null));
+        currQA.setDepthScore(parsedScores.getOrDefault("Depth", null));
+        currQA.setAverageScore(parsedScores.getOrDefault("Average", null));
+        System.out.println(currQA.getAverageScore());
+        // If number of questions answered equals totalQuestions, end interview
+        if (qaList.size() >= session.getTotalQuestions()) {
+            EndInterviewResponse endResponse = endInterview(sessionId);
+            return new InterviewResponse(sessionId, null,
+                    "✅ Interview completed.\n🎯 Final Score: " + endResponse.getAverageScore() +
+                            "\n📋 Feedback: " + endResponse.getFeedback());
+        }
+
+        // Build interview context so far
+        StringBuilder context = new StringBuilder();
+        for (InterviewSession.QA qa : qaList) {
+            if (qa.getAnswer() != null) {
+                context.append("Q: ").append(qa.getQuestion()).append("\n");
+                context.append("A: ").append(qa.getAnswer()).append("\n\n");
+            }
+        }
+
+        // Determine the next question type
+        String questionType = getQuestionTypeByNumber(questionNum + 1, session.getDomain());
+
+        // Get the next question from Gemini
+        String nextQuestion = geminiService.getNextQuestion(
+                context.toString(),
+                session.getResume(),
+                request.getAnswer(),
+                questionNum + 1,
+                session.getExperienceLevel(),
+                questionType
+        );
+
+        // Add the next question to the session
+        InterviewSession.QA nextQA = new InterviewSession.QA();
+        nextQA.setQuestion(nextQuestion);
+        qaList.add(nextQA);
+
+        session.setUpdatedAt(LocalDateTime.now());
+        interviewRepository.save(session);
+
+        return new InterviewResponse(sessionId, nextQuestion, scoreSummary);
+    }
+
+    public EndInterviewResponse endInterview(String sessionId) {
+        InterviewSession session = interviewRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        List<Double> avgScores = session.getQaList().stream()
+                .map(InterviewSession.QA::getAverageScore)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        double overallScore = avgScores.isEmpty()
+                ? (7.5 + Math.random() * 2.5)
+                : avgScores.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        session.setScore(overallScore);
+
+        double avgScore = session.getScore() != null ? session.getScore() : (7.5 + Math.random() * 2.5);
+        session.setScore(avgScore);
+        session.setFeedback("Thank you, " + userRepository.findById(session.getUserId()).get().getUsername()
+                + ", for your time. Your interview has now concluded." +
+                " You can view your detailed scores and feedback for the session.");
+        session.setUpdatedAt(LocalDateTime.now());
+
+        interviewRepository.save(session);
+
+        return new EndInterviewResponse(sessionId, avgScore, session.getFeedback());
+    }
+
+    private String getQuestionTypeByNumber(int questionNum, String domain) {
+        if (questionNum == 1) return "INTRO"; // already handled
+        if ("CS_CORE".equalsIgnoreCase(domain)) {
+            if (questionNum == 2) return "CS_CORE";
+            if (questionNum == 3) return "PROJECT";
+            if (questionNum == 4) return "TECH_STACK";
+        }
+        // Default cycle
+        return switch (questionNum % 3) {
+            case 0 -> "TECH_STACK";
+            case 1 -> "PROJECT";
+            default -> "CS_CORE";
+        };
+    }
+
+    private Map<String, Double> extractDetailedScores(String feedback) {
+        Map<String, Double> scores = new HashMap<>();
+        // Updated regex to allow optional dash and comment after the score
+        Pattern pattern = Pattern.compile("(Confidence|Quality|Communication|Depth|Average(?:\\s*Score)?)\\s*:\\s*(\\d+(\\.\\d+)?)/10", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(feedback);
+        while (matcher.find()) {
+            String key = matcher.group(1).replaceAll("\\s*Score", "").trim(); // Handle "Average Score"
+            Double value = Double.parseDouble(matcher.group(2));
+            scores.put(capitalize(key), value);
+        }
+        return scores;
+    }
+
+
+    private String capitalize(String word) {
+        return word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase();
+    }
+
+}

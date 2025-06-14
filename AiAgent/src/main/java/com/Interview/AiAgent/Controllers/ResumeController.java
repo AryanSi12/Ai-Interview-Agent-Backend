@@ -25,11 +25,6 @@ public class ResumeController {
             String resumeText = tika.parseToString(file.getInputStream());
 
             String responseJson = geminiService.extractResumeDetails(resumeText);
-
-            // Optional: You can parse this JSON string into Map<String, Object> if needed
-            // ObjectMapper mapper = new ObjectMapper();
-            // Map<String, Object> result = mapper.readValue(responseJson, Map.class);
-
             return ResponseEntity.ok(responseJson);
 
         } catch (IOException | TikaException e) {

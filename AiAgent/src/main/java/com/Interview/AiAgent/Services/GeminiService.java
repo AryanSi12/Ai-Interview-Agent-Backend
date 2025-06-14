@@ -112,19 +112,30 @@ public class GeminiService {
 
     public boolean isInappropriateAnswer(String answer) {
         String prompt = """
-            You are an AI assistant helping in a professional interview.
+        You are an AI assistant helping in a professional interview.
 
-            Review the following candidate's answer and determine if it is **offensive, mocking, sarcastic, satirical, or highly unprofessional**. 
+        Review the following candidate's answer and determine if it is **highly unprofessional** — meaning it contains clear signs of **rudeness, personal attacks, inappropriate language, or explicit mocking**.
 
-            Do **NOT** mark it inappropriate if the answer is vague, unclear, off-topic, or something like "I don't know".
+        Be **lenient**. Do NOT mark it inappropriate if the answer is:
+        - vague or unclear
+        - off-topic
+        - casual or a bit informal
+        - shows hesitation like "I don't know" or "I'm not sure"
+        - uses mild humor
 
-            Text:
-            "%s"
+        Only mark it inappropriate if it is **clearly**:
+        - disrespectful
+        - mocking the interviewer
+        - using abusive language
+        - highly sarcastic in a negative or hostile way
 
-            Respond with exactly one word:
-            - "OK" → if the response is acceptable, even if vague or unsure
-            - "RUBBISH" → only if the response is rude, mocking, offensive, or clearly disrespectful
-            """.formatted(answer);
+        Candidate Answer:
+        "%s"
+
+        Respond with exactly one word:
+        - "OK" → if the response is acceptable, even if unsure or informal
+        - "RUBBISH" → only if clearly offensive, mocking, or abusive
+        """.formatted(answer);
 
         String result = geminiClient.generate(prompt).trim().toUpperCase();
         return result.contains("RUBBISH");

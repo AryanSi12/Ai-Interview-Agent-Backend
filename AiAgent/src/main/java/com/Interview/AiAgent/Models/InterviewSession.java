@@ -25,6 +25,9 @@ public class InterviewSession {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    private int totalQuestions; // New field
+
+    private String resume;
     // Optional
     private String feedback;
     private Double score;
@@ -33,6 +36,13 @@ public class InterviewSession {
     public static class QA {
         private String question;
         private String answer;
-        private String sentiment; // optional, can be used later
+        private Double confidenceScore;
+        private Double qualityScore;
+        private Double communicationScore;
+        private Double depthScore;
+        private Double averageScore;
+
+
+        private String scoreFeedbackText;
     }
 }
