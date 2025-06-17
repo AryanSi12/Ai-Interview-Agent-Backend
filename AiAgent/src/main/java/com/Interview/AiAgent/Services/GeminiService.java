@@ -11,40 +11,50 @@ public class GeminiService {
     @Autowired
     private GeminiClient geminiClient;
 
-    public String getNextQuestion(String context, String resume, String lastAnswer,
-                                  int questionNum, String experienceLevel, String questionType) {
+    public String getNextQuestion(String context, String resume, String lastAnswer, int questionNumber,
+                                  String experienceLevel, String questionType, String domain) {
 
         String prompt = """
-            You are an intelligent and adaptive AI interviewer.
+        You are an AI interviewer conducting a professional mock interview.
 
-            Candidate Experience Level: %s
+        Candidate's Resume:
+        %s
 
-            Context so far:
-            %s
+        Candidate's Domain: %s
 
-            Resume:
-            %s
+        Conversation so far:
+        %s
 
-            Previous Answer:
-            %s
+        Last Answer:
+        %s
 
-            Task:
-            Ask question %d of the interview. Question type: %s.
+        Instructions:
+        - Start with a short, friendly reply to the candidate's last answer.
+        - Then ask ONE interview question related to the category: %s
+        - Try to **connect the question with the candidate's domain** (%s) if possible.
+        - Make sure some questions are from the domain's perspective as well.
+        - try not to ask very long questions
 
-            Guidelines:
-            - Start with a short, friendly reply to the candidate's last answer.
-            - Then ask ONE question related to the specified category:
-                - "CS_CORE": Choose from OOP, DBMS, Operating Systems, Computer Networks (simple conceptual questions).
-                - "PROJECT": Ask about project architecture, design choices, technologies used, or challenges.
-                - "TECH_STACK": Ask about languages/frameworks mentioned (like React, Java, MongoDB, etc.).
-                - For project you can ask questions on data structure , algorithms, or design patterns used.
-            - Be **very lenient** for freshers, ask simple questions and keep language simple.
-            - Ask only one clear, conceptual question.
+        Question Category Rules:
+        - "CS_CORE": Choose from **OOP, DBMS, Operating Systems, or Computer Networks**.
+            - Prefer questions that relate to the candidate's domain (e.g., DBMS for FULLSTACK, OS for DEVOPS).
+            - Combine two topics where possible (e.g., OS + DBMS).
+            - Ask only simple **conceptual** questions.
+        - "PROJECT": Ask about architecture, design decisions, tech stack, or challenges faced in domain-related projects.
+            - You may also ask about **data structures**, **algorithms**, or **design patterns** used.
+        - "TECH_STACK": Ask about **specific technologies** relevant to their domain (e.g., React, Spring Boot, Docker, PyTorch).
 
-            Output: Friendly transition + One interview question.
-            """.formatted(experienceLevel, context, resume, lastAnswer, questionNum, questionType.toUpperCase());
+        Tone & Complexity Guidelines:
+        - Be **very lenient for freshers**, especially on depth and terminology.
+        - Keep language **simple** and beginner-friendly.
+        - Ask only **one clear, non-ambiguous, conceptual** question.
+        - Avoid repeating previously asked questions.
+        - Avoid overly complex syntax or deep theory unless experience level is senior.
 
-        return geminiClient.generate(prompt);
+        Respond with only your reply and the next question.
+        """.formatted(resume, domain, context, lastAnswer, questionType, domain);
+
+        return geminiClient.generate(prompt).trim();
     }
 
     public String getScore(String question, String answer, String experienceLevel) {
@@ -71,6 +81,8 @@ public class GeminiService {
             - For experienced candidates, apply stricter criteria.
             - Justify each score in 1 sentence.
             - Give final average score out of 10 at the end.
+            - Mark freshers well if they are close to the answer
+            
 
             Format strictly as:
             Confidence: X/10 - reason
@@ -141,17 +153,23 @@ public class GeminiService {
         return result.contains("RUBBISH");
     }
 
-    public String answerCandidateQuestion(String candidateQuestion) {
+    public String answerCandidateQuestion(String candidateLastReply) {
         String prompt = """
-            You are an AI interviewer.
+        You are an AI interviewer.
 
-            A candidate has just completed the technical interview and asked this question:
+        The candidate has just completed the technical interview. Here's their final message:
 
-            "%s"
+        "%s"
 
-            Give a short, clear, and professional answer as if you're an HR or technical interviewer.
-            """.formatted(candidateQuestion);
+        Please respond with a short, clear, and professional message as if you're the HR or technical interviewer.
+        
+        - Politely acknowledge their message.
+        - Conclude the interview on a positive note.
+        - Suggest 2–3 key areas they can focus on to improve.
+        - Keep it encouraging, constructive, and concise.
+        """.formatted(candidateLastReply);
 
-        return geminiClient.generate(prompt);
+        return geminiClient.generate(prompt).trim();
     }
+
 }

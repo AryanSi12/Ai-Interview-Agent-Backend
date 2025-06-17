@@ -37,11 +37,11 @@ public class InterviewService {
             session.setQaList(new ArrayList<>());
             session.setCreatedAt(LocalDateTime.now());
             session.setUpdatedAt(LocalDateTime.now());
-            session.setTotalQuestions(request.getTotalQuestions());
+            session.setTotalQuestions(request.getTotalQuestions() + 1);
             session.setResume(request.getResume());
             interviewRepository.save(session);
 
-            String introQuestion = "Hello! I'm your AI interviewer, Before we begin, I’d love to get to know you a bit better. Could you please introduce yourself?";
+            String introQuestion = "Hello! I'm your AI interviewer. Before we dive into the interview, I’d love to get to know you a little better. Could you please start by introducing yourself and sharing what inspired you to choose this particular domain?";
             InterviewSession.QA firstQA = new InterviewSession.QA();
             firstQA.setQuestion(introQuestion);
             session.getQaList().add(firstQA);
@@ -78,7 +78,7 @@ public class InterviewService {
                     "Your response was flagged as inappropriate. The interview has been terminated.\n\n" +
                             "Final Score: " + endResponse.getAverageScore() + "\n" +
                             "Feedback: " + endResponse.getFeedback());
-        }
+                    }
 
 
         // Score the answer using Gemini
@@ -97,12 +97,20 @@ public class InterviewService {
         currQA.setCommunicationScore(parsedScores.getOrDefault("Communication", null));
         currQA.setDepthScore(parsedScores.getOrDefault("Depth", null));
         currQA.setAverageScore(parsedScores.getOrDefault("Average", null));
+
+        qaList.set(questionNum - 1, currQA);
+        session.setQaList(qaList);
+        session.setUpdatedAt(LocalDateTime.now());
+
+
+        interviewRepository.save(session);
         System.out.println(currQA.getAverageScore());
         // If number of questions answered equals totalQuestions, end interview
         if (qaList.size() >= session.getTotalQuestions()) {
             EndInterviewResponse endResponse = endInterview(sessionId);
-            return new InterviewResponse(sessionId, null,
-                    "✅ Interview completed.\n🎯 Final Score: " + endResponse.getAverageScore() +
+            String reply = geminiService.answerCandidateQuestion(request.getAnswer());
+            return new InterviewResponse(sessionId, reply,
+                    "Interview completed.\n🎯 Final Score: " + endResponse.getAverageScore() +
                             "\n📋 Feedback: " + endResponse.getFeedback());
         }
 
@@ -125,7 +133,8 @@ public class InterviewService {
                 request.getAnswer(),
                 questionNum + 1,
                 session.getExperienceLevel(),
-                questionType
+                questionType,
+                session.getDomain()
         );
 
         // Add the next question to the session
@@ -165,20 +174,26 @@ public class InterviewService {
         return new EndInterviewResponse(sessionId, avgScore, session.getFeedback());
     }
 
+    private static final List<String> BASE_TYPES = List.of("CS_CORE", "PROJECT", "TECH_STACK");
+    private List<String> categoryCycle = new ArrayList<>();
+    private int categoryIndex = 0;
+    private static final Random RANDOM = new Random();
+
     private String getQuestionTypeByNumber(int questionNum, String domain) {
-        if (questionNum == 1) return "INTRO"; // already handled
-        if ("CS_CORE".equalsIgnoreCase(domain)) {
-            if (questionNum == 2) return "CS_CORE";
-            if (questionNum == 3) return "PROJECT";
-            if (questionNum == 4) return "TECH_STACK";
+        if (questionNum == 1) return "INTRO";
+
+        // Refill and reshuffle once all categories are used
+        if (categoryIndex >= categoryCycle.size()) {
+            categoryCycle = new ArrayList<>(BASE_TYPES);
+            Collections.shuffle(categoryCycle, RANDOM);
+            categoryIndex = 0;
         }
-        // Default cycle
-        return switch (questionNum % 3) {
-            case 0 -> "TECH_STACK";
-            case 1 -> "PROJECT";
-            default -> "CS_CORE";
-        };
+
+        return categoryCycle.get(categoryIndex++);
     }
+
+
+
 
     private Map<String, Double> extractDetailedScores(String feedback) {
         Map<String, Double> scores = new HashMap<>();
