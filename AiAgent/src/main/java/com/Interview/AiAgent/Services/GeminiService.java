@@ -3,7 +3,7 @@ package com.Interview.AiAgent.Services;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.util.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class GeminiService {
@@ -153,23 +153,121 @@ public class GeminiService {
         return result.contains("RUBBISH");
     }
 
-    public String answerCandidateQuestion(String candidateLastReply) {
+    public String answerCandidateQuestion(String context, String resume, String experienceLevel, String domain, String candidateLastReply) {
         String prompt = """
-        You are an AI interviewer.
+        You are an AI interviewer concluding a **mock technical interview**.
 
-        The candidate has just completed the technical interview. Here's their final message:
+        Candidate Details:
+        - Experience Level: %s
+        - Domain: %s
 
+        Candidate's Resume:
+        %s
+
+        Interview Q&A Transcript:
+        %s
+
+        Final message from candidate:
         "%s"
 
-        Please respond with a short, clear, and professional message as if you're the HR or technical interviewer.
-        
-        - Politely acknowledge their message.
-        - Conclude the interview on a positive note.
-        - Suggest 2–3 key areas they can focus on to improve.
-        - Keep it encouraging, constructive, and concise.
-        """.formatted(candidateLastReply);
+        Please write a warm and constructive closing message.
+
+        ✅ Instructions:
+        - Acknowledge the candidate’s message politely.
+        - Mention that this was a mock interview simulation.
+        - Refer lightly to how the candidate performed based on the transcript (e.g., communication, clarity, effort).
+        - Suggest 2–3 **realistic and actionable** improvement areas (e.g., better DBMS concepts, cleaner project structure, or system design basics).
+        - Be **very lenient with freshers**. Encourage growth and learning.
+        - End with a **positive and motivating closing line** (e.g., “You’re on the right track, keep going!”).
+
+        🎯 Keep tone professional, helpful, and concise (1–3 paragraphs max).
+        Just return the message – do not add headers or bullets.
+        """.formatted(experienceLevel, domain, resume, context, candidateLastReply);
 
         return geminiClient.generate(prompt).trim();
     }
+
+
+    public String feedbackOnInterview(String context, String resume, String experienceLevel, String domain) {
+        try {
+            String prompt = """
+        You are an AI interviewer who has just completed a professional mock interview.
+
+        Candidate Details:
+        - Experience Level: %s
+        - Domain: %s
+
+        Candidate's Resume:
+        %s
+
+        Full Interview Transcript (Q&A):
+        %s
+
+        Now, based on the entire conversation, provide a friendly, professional, and constructive review.
+        
+        ✅ Guidelines:
+        - DO NOT assign any numeric scores or ratings.
+        - DO NOT criticize harshly. Be very lenient and encouraging, especially if the candidate is a **fresher**.
+        - Start with an overall impression of the candidate's performance.
+        - Highlight **strengths** clearly — communication, understanding, curiosity, etc.
+        - Gently mention areas for **improvement** — conceptual clarity, deeper explanations, or practical experience.
+        - Give 2-3 **actionable suggestions** to help the candidate improve in future interviews.
+        - End with a kind, motivating closing remark.
+
+        Keep tone professional, clear, and empathetic. No bullet points needed. Use 1-3 paragraphs.
+
+        Generate only the feedback text.
+        """.formatted(experienceLevel, domain, resume, context);
+
+            return geminiClient.generate(prompt).trim();
+
+        } catch (Exception e) {
+            return "Failed to generate feedback: " + e.getMessage();
+        }
+    }
+
+
+    public String getResumeAnalysis(String resume) {
+        try {
+            String prompt = """
+        You are an AI-powered career coach and resume analyst.
+
+        Below is your resume:
+
+        --- Resume Start ---
+        %s
+        --- Resume End ---
+
+        Review this resume and provide a detailed, friendly assessment in the following format:
+
+        ✅ 1. Suggested Domains/Roles:
+        - Based on your skills, experiences, and projects, suggest 2–3 job roles or domains that best match your profile (e.g., Frontend Developer, Cloud Engineer, Data Analyst).
+        - Explain why these roles suit you, referring to specific things from your resume.
+
+        ✅ 2. Topics to Focus Before Interviews:
+        - Recommend the most important technical and soft skills you should brush up on before interviews.
+        - Mention what kinds of interview questions you might be asked based on your resume (projects, tools, tech).
+        - Help you understand where to focus to build more confidence.
+
+        ✅ 3. Important Topics Based on Your Resume:
+        - From the programming languages, tools, and technologies you've mentioned, list key topics you should master or revise.
+        - Also look at your projects and recommend what core concepts or challenges you should be prepared to discuss.
+        - Format this section as:
+          Technology/Language: Topic 1, Topic 2, Topic 3...
+
+        🟢 Be supportive and encouraging, especially if you're a fresher.
+        🎯 Keep the advice clear, structured, and actionable.
+        ✨ Format your response in 3 numbered sections with short paragraphs. No bullet points.
+
+        Respond only with the personalized review.
+        """.formatted(resume);
+
+            return geminiClient.generate(prompt).trim();
+
+        } catch (Exception e) {
+            return "Failed to analyze resume: " + e.getMessage();
+        }
+    }
+
 
 }

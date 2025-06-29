@@ -86,7 +86,6 @@ public class UserController {
 
             boolean usernameUpdated = false;
 
-            // ✅ Check for password update
             if (updatedDetails.getPassword() != null && !updatedDetails.getPassword().isEmpty()) {
                 if (updatedDetails.getCurrentPassword() == null ||
                         !passwordEncoder().matches(updatedDetails.getCurrentPassword(), user.getPassword())) {
@@ -95,7 +94,6 @@ public class UserController {
                 user.setPassword(passwordEncoder().encode(updatedDetails.getPassword()));
             }
 
-            // ✅ Check for username update
             if (updatedDetails.getUsername() != null &&
                     !updatedDetails.getUsername().isEmpty() &&
                     !updatedDetails.getUsername().equals(user.getUsername())) {
@@ -106,7 +104,6 @@ public class UserController {
             user.setUpdatedAt(LocalDateTime.now());
             userService.saveUser(user);
 
-            // ✅ Regenerate token ONLY if username changed
             if (usernameUpdated) {
                 String newToken = jwtUtil.generateToken(user.getUsername());
                 ResponseCookie cookie = ResponseCookie.from("jwtToken", newToken)

@@ -10,6 +10,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -28,6 +30,10 @@ public class User {
     private String userImage;
 
     private String password;
+
+    private List<Integer> ratingHistory = new ArrayList<>();
+    private int currentRating = 1000;
+
 
     @CreatedDate
     private LocalDateTime createdAt;

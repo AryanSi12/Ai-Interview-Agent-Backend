@@ -5,9 +5,12 @@ import com.Interview.AiAgent.DTO.InterviewResponse;
 import com.Interview.AiAgent.DTO.StartInterviewRequest;
 import com.Interview.AiAgent.DTO.SubmitAnswerRequest;
 import com.Interview.AiAgent.Models.InterviewSession;
+import com.Interview.AiAgent.Models.User;
 import com.Interview.AiAgent.Repository.InterviewRepository;
 import com.Interview.AiAgent.Repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,6 +26,9 @@ public class InterviewService {
 
     @Autowired
     GeminiService geminiService;
+
+    @Autowired
+    UserService userService;
 
     @Autowired
     UserRepository userRepository;
@@ -104,16 +110,6 @@ public class InterviewService {
 
 
         interviewRepository.save(session);
-        System.out.println(currQA.getAverageScore());
-        // If number of questions answered equals totalQuestions, end interview
-        if (qaList.size() >= session.getTotalQuestions()) {
-            EndInterviewResponse endResponse = endInterview(sessionId);
-            String reply = geminiService.answerCandidateQuestion(request.getAnswer());
-            return new InterviewResponse(sessionId, reply,
-                    "Interview completed.\n🎯 Final Score: " + endResponse.getAverageScore() +
-                            "\n📋 Feedback: " + endResponse.getFeedback());
-        }
-
         // Build interview context so far
         StringBuilder context = new StringBuilder();
         for (InterviewSession.QA qa : qaList) {
@@ -122,6 +118,23 @@ public class InterviewService {
                 context.append("A: ").append(qa.getAnswer()).append("\n\n");
             }
         }
+        System.out.println(currQA.getAverageScore());
+        // If number of questions answered equals totalQuestions, end interview
+        if (qaList.size() >= session.getTotalQuestions()) {
+            EndInterviewResponse endResponse = endInterview(sessionId);
+            String reply = geminiService.answerCandidateQuestion(context.toString(),session.getResume(),session.getExperienceLevel(),session.getDomain(),request.getAnswer());
+            String feedback = geminiService.feedbackOnInterview(context.toString(),session.getResume(),
+                    session.getExperienceLevel(),session.getDomain());
+            session.setFeedback(feedback);
+            session.setScore(endResponse.getAverageScore());
+            updateUserRating(endResponse.getAverageScore());
+            interviewRepository.save(session);
+            return new InterviewResponse(sessionId, reply,
+                    "Interview completed.\n🎯 Final Score: " + endResponse.getAverageScore() +
+                            "\n📋 Feedback: " + feedback);
+        }
+
+
 
         // Determine the next question type
         String questionType = getQuestionTypeByNumber(questionNum + 1, session.getDomain());
@@ -212,5 +225,67 @@ public class InterviewService {
     private String capitalize(String word) {
         return word.substring(0, 1).toUpperCase() + word.substring(1).toLowerCase();
     }
+
+    public InterviewSession getBySessionId(String sessionId) {
+        Optional<InterviewSession> session = interviewRepository.findById(sessionId);
+        return session.get();
+    }
+
+    public List<InterviewSession> getAllSessionsByUserId(String userId) {
+        return interviewRepository.findByUserId(userId);
+    }
+
+    public Boolean deleteBySessionId(String sessionId, String userId) {
+        InterviewSession session = interviewRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        if (!session.getUserId().equals(userId)) {
+            throw new RuntimeException("You are not authorized to delete this session");
+        }
+        interviewRepository.deleteById(sessionId);
+        return true;
+
+    }
+
+    public String getResumeAnalysis(String resume) {
+        return geminiService.getResumeAnalysis(resume);
+    }
+
+    public void updateUserRating(double sessionScore) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        User user = userService.getCurrUser(username);
+        int currentRating = user.getCurrentRating();
+        int change = calculateRatingChange(sessionScore, currentRating);
+        int newRating = currentRating + change;
+
+        List<Integer> ratingHistory = user.getRatingHistory();
+        if (ratingHistory == null) {
+            ratingHistory = new ArrayList<>();
+        }
+        ratingHistory.add(newRating);
+
+        // Update user
+        user.setCurrentRating(newRating);
+        user.setRatingHistory(ratingHistory);
+        userRepository.save(user);
+    }
+
+    public int calculateRatingChange(double score, int currentRating) {
+        int maxRatingGain = 50;
+        double gainFactor = Math.max(0, (score - 6) / 4.0);  // 6–10 range
+        double lossFactor = Math.min(1, (6 - score) / 6.0);  // 0–6 range
+
+        double difficultyMultiplier = 1.0;
+        if (currentRating >= 1500 && currentRating < 1800) difficultyMultiplier = 0.75;
+        else if (currentRating >= 1800) difficultyMultiplier = 0.5;
+
+        if (score > 6) {
+            return (int) Math.round(gainFactor * maxRatingGain * difficultyMultiplier);
+        } else {
+            return -(int) Math.round(lossFactor * 25);  // Fixed penalty
+        }
+    }
+
 
 }

@@ -11,15 +11,6 @@ import java.util.Map;
 public class AiAgentApplication {
 
 	public static void main(String[] args) {
-		// Load .env once
-		Dotenv dotenv = Dotenv.configure()
-				.filename(".env")
-				.ignoreIfMissing()
-				.load();
-
-		for (DotenvEntry entry : dotenv.entries()) {
-			System.setProperty(entry.getKey(), entry.getValue());
-		}
 
 		SpringApplication.run(AiAgentApplication.class, args);
 	}
